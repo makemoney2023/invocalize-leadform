@@ -15,7 +15,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Experience the future of AI-powered voice interactions",
+  title: "Unlock the Power of AI Voice Agents with InvocalizeAI.",
   description: "InvcocalizeAI",
 };
 
