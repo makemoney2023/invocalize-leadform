@@ -6,15 +6,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import toast from 'react-hot-toast'
 
 export function VoiceDemoForm() {
-  const [isLoading, setIsLoading] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState<boolean>(false)
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setIsLoading(true)
-    setMessage(null)
 
     const formData = new FormData(event.currentTarget)
     const data = Object.fromEntries(formData.entries())
@@ -32,17 +31,10 @@ export function VoiceDemoForm() {
         throw new Error('Failed to send call')
       }
 
-      toast({
-        title: "Success",
-        description: "Our AI agent will call you shortly!",
-      })
+      toast.success("Our AI agent will call you shortly!")
     } catch (error) {
       console.error('Error:', error)
-      toast({
-        title: "Error",
-        description: "Failed to initiate the call. Please try again.",
-        variant: "destructive",
-      })
+      toast.error("Failed to initiate the call. Please try again.")
     } finally {
       setIsLoading(false)
     }
