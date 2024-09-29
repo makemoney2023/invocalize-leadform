@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from '@/components/ui/button'
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -8,11 +8,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import toast from 'react-hot-toast'
 import axios from 'axios'
+import { StatusModal } from "@/components/StatusModal"
+import { useRouter } from 'next/navigation'
 
 export function VoiceDemoForm() {
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [callId, setCallId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [showModal, setShowModal] = useState<boolean>(false)
+  const router = useRouter()
+
+  useEffect(() => {
+    if (showModal) {
+      const timer = setTimeout(() => {
+        router.push('https://invocalize-dash.vercel.app/')
+      }, 10000) // Redirect after 10 seconds
+      return () => clearTimeout(timer)
+    }
+  }, [showModal, router])
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -36,13 +49,12 @@ export function VoiceDemoForm() {
 
       console.log('Response from send-call:', response.data);
 
-      const { callId, leadId, analysis } = response.data
-      setCallId(callId)
+      const { callId } = response.data;
+      setCallId(callId);
 
-      console.log('Call analysis:', analysis);
-      toast.success('Call initiated and analyzed successfully!');
-
+      toast.success('Call initiated successfully!');
       setIsLoading(false)
+      setShowModal(true) // Show the modal after successful submission
     } catch (error: any) {
       console.error('Error sending call:', error.response?.data || error.message);
       setError('Failed to send call. Please try again.')
@@ -133,6 +145,7 @@ export function VoiceDemoForm() {
         {error && <p className="text-red-500">{error}</p>}
         {callId && <p>Call ID: {callId}</p>}
       </form>
+      <StatusModal isOpen={showModal} />
     </div>
   )
 }

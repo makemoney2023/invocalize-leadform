@@ -3,43 +3,50 @@ import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
 
 const BLAND_API_KEY = process.env.BLAND_API_KEY;
-const supabaseUrl = process.env.SUPABASE_URL!;
-const supabaseKey = process.env.SUPABASE_ANON_KEY!;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient(supabaseUrl!, supabaseKey!);
 
 async function pollCallStatus(callId: string, leadId: string) {
   let callCompleted = false;
   let attempts = 0;
-  const maxAttempts = 60; // Poll for up to 30 minutes (30 seconds * 60 attempts)
+  const maxAttempts = 10; // Poll for up to 5 minutes (30 seconds * 10 attempts)
 
   while (!callCompleted && attempts < maxAttempts) {
     try {
       const response = await axios.get(`https://api.bland.ai/v1/calls/${callId}`, {
         headers: {
-          'Authorization': BLAND_API_KEY,
-          'Content-Type': 'application/json'
+          'Authorization': BLAND_API_KEY
         }
       });
 
       const callDetails = response.data;
 
-      if (callDetails.status === 'completed' && callDetails.transcript) {
-        // Update Supabase with final call details
-        await supabase
-          .from('leads')
-          .update({
-            call_status: callDetails.status,
-            call_duration: callDetails.duration,
-            call_transcript: callDetails.transcript
-          })
-          .eq('id', leadId);
+      // Update Supabase with the current call status
+      const updateData: { call_status: string; call_duration?: number } = {
+        call_status: callDetails.status
+      };
 
+      if (callDetails.status === 'completed') {
+        updateData.call_duration = callDetails.call_length || 0;
+      }
+
+      await supabase
+        .from('leads')
+        .update(updateData)
+        .eq('id', leadId);
+
+      console.log(`Call status: ${callDetails.status}`);
+
+      if (callDetails.status === 'completed' || callDetails.status === 'error') {
         callCompleted = true;
-        console.log('Call details updated successfully');
+        if (callDetails.status === 'completed') {
+          // Start polling for transcript
+          pollTranscript(callId, leadId);
+        }
       } else {
-        console.log(`Waiting for transcript... (Attempt ${attempts + 1})`);
-        // Wait for 30 seconds before next poll
+        console.log(`Waiting for call completion... (Attempt ${attempts + 1})`);
         await new Promise(resolve => setTimeout(resolve, 30000));
         attempts++;
       }
@@ -50,6 +57,66 @@ async function pollCallStatus(callId: string, leadId: string) {
   }
 
   if (!callCompleted) {
+    console.error('Max polling attempts reached. Call status may not be available.');
+    await supabase
+      .from('leads')
+      .update({
+        call_status: 'unknown'
+      })
+      .eq('id', leadId);
+  }
+}
+
+async function pollTranscript(callId: string, leadId: string) {
+  let transcriptReceived = false;
+  let attempts = 0;
+  const maxAttempts = 20; // Poll for up to 10 minutes (30 seconds * 20 attempts)
+
+  while (!transcriptReceived && attempts < maxAttempts) {
+    try {
+      const response = await axios.get(`https://api.bland.ai/v1/calls/${callId}`, {
+        headers: {
+          'Authorization': BLAND_API_KEY
+        }
+      });
+
+      const callDetails = response.data;
+
+      if (callDetails.status === 'completed' && callDetails.transcripts) {
+        const transcriptData = {
+          concatenated_transcript: callDetails.concatenated_transcript,
+          transcripts: callDetails.transcripts,
+          summary: callDetails.summary,
+          call_length: callDetails.call_length,
+          answered_by: callDetails.answered_by,
+          call_ended_by: callDetails.call_ended_by
+        };
+
+        await supabase
+          .from('leads')
+          .update({
+            call_transcript: JSON.stringify(transcriptData),
+            call_duration: callDetails.corrected_duration || callDetails.call_length
+          })
+          .eq('id', leadId);
+
+        console.log('Transcript received and stored');
+        transcriptReceived = true;
+      } else if (callDetails.status === 'error') {
+        console.error('Call ended with an error:', callDetails.error_message);
+        transcriptReceived = true; // Stop polling on error
+      } else {
+        console.log(`Waiting for transcript... (Attempt ${attempts + 1})`);
+        await new Promise(resolve => setTimeout(resolve, 30000));
+        attempts++;
+      }
+    } catch (error) {
+      console.error('Error polling for transcript:', error);
+      attempts++;
+    }
+  }
+
+  if (!transcriptReceived) {
     console.error('Max polling attempts reached. Transcript may not be available.');
   }
 }
