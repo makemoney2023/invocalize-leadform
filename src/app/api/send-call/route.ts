@@ -3,8 +3,8 @@ import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
 
 const BLAND_API_KEY = process.env.BLAND_API_KEY;
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseUrl = process.env.SUPABASE_URL!;
+const supabaseKey = process.env.SUPABASE_ANON_KEY!;
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
