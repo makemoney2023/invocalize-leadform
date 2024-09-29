@@ -7,36 +7,69 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import toast from 'react-hot-toast'
+import axios from 'axios'
 
 export function VoiceDemoForm() {
   const [isLoading, setIsLoading] = useState<boolean>(false)
+  const [callId, setCallId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setIsLoading(true)
-
-    const formData = new FormData(event.currentTarget)
-    const data = Object.fromEntries(formData.entries())
+    setError(null)
 
     try {
-      const response = await fetch('/api/send-call', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      })
+      const formData = new FormData(event.currentTarget);
+      const data = {
+        name: formData.get('name') as string,
+        email: formData.get('email') as string,
+        phoneNumber: formData.get('phoneNumber') as string,
+        company: formData.get('company') as string,
+        role: formData.get('role') as string,
+        useCase: formData.get('useCase') as string
+      };
 
-      if (!response.ok) {
-        throw new Error('Failed to send call')
-      }
+      console.log('Sending form data:', data);
 
-      toast.success("Our AI agent will call you shortly!")
-    } catch (error) {
-      console.error('Error:', error)
-      toast.error("Failed to initiate the call. Please try again.")
-    } finally {
+      const response = await axios.post('/api/send-call', data);
+
+      console.log('Response from send-call:', response.data);
+
+      const { callId, leadId, analysis } = response.data
+      setCallId(callId)
+
+      console.log('Call analysis:', analysis);
+      toast.success('Call initiated and analyzed successfully!');
+
       setIsLoading(false)
+    } catch (error: any) {
+      console.error('Error sending call:', error.response?.data || error.message);
+      setError('Failed to send call. Please try again.')
+      setIsLoading(false)
+      toast.error('Failed to initiate call. Please try again.');
+    }
+  }
+
+  const analyzeCall = async (callId: string) => {
+    try {
+      const response = await axios.post('/api/analyze-call', {
+        callId,
+        goal: "Understand customer satisfaction and product feedback",
+        questions: [
+          ["Who answered the call?", "human or voicemail"],
+          ["Positive feedback about the product: ", "string"],
+          ["Negative feedback about the product: ", "string"],
+          ["Customer confirmed they were satisfied", "boolean"]
+        ] as [string, string][]
+      });
+
+      // Handle the analysis result as needed
+      console.log('Analysis result:', response.data.analysis)
+      // You might want to update the UI with the analysis result
+    } catch (error) {
+      console.error('Error analyzing call:', error)
+      // Optionally set an error state or show a notification
     }
   }
 
@@ -96,6 +129,9 @@ export function VoiceDemoForm() {
         <Button type="submit" className="w-full" disabled={isLoading}>
           {isLoading ? "Sending..." : "Call Me"}
         </Button>
+        
+        {error && <p className="text-red-500">{error}</p>}
+        {callId && <p>Call ID: {callId}</p>}
       </form>
     </div>
   )
