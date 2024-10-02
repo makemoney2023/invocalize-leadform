@@ -11,7 +11,7 @@ const supabase = createClient(supabaseUrl!, supabaseKey!);
 async function pollCallStatus(callId: string, leadId: string) {
   let callCompleted = false;
   let attempts = 0;
-  const maxAttempts = 10; // Poll for up to 5 minutes (30 seconds * 10 attempts)
+  const maxAttempts = 10;
 
   while (!callCompleted && attempts < maxAttempts) {
     try {
@@ -23,14 +23,36 @@ async function pollCallStatus(callId: string, leadId: string) {
 
       const callDetails = response.data;
 
-      // Update Supabase with the current call status
-      const updateData: { call_status: string; call_duration?: number } = {
-        call_status: callDetails.status
+      const updateData = {
+        call_status: callDetails.status,
+        call_length: callDetails.call_length,
+        batch_id: callDetails.batch_id,
+        to_number: callDetails.to,
+        from_number: callDetails.from,
+        request_data: callDetails.request_data,
+        completed: callDetails.completed,
+        inbound: callDetails.inbound,
+        queue_status: callDetails.queue_status,
+        endpoint_url: callDetails.endpoint_url,
+        max_duration: callDetails.max_duration,
+        error_message: callDetails.error_message,
+        variables: callDetails.variables,
+        answered_by: callDetails.answered_by,
+        record: callDetails.record,
+        recording_url: callDetails.recording_url,
+        c_id: callDetails.c_id,
+        metadata: callDetails.metadata,
+        summary: callDetails.summary,
+        price: callDetails.price,
+        started_at: callDetails.started_at,
+        local_dialing: callDetails.local_dialing,
+        call_ended_by: callDetails.call_ended_by,
+        pathway_logs: callDetails.pathway_logs,
+        analysis_schema: callDetails.analysis_schema,
+        status: callDetails.status,
+        corrected_duration: callDetails.corrected_duration,
+        end_at: callDetails.end_at
       };
-
-      if (callDetails.status === 'completed') {
-        updateData.call_duration = callDetails.call_length || 0;
-      }
 
       await supabase
         .from('leads')
@@ -42,7 +64,6 @@ async function pollCallStatus(callId: string, leadId: string) {
       if (callDetails.status === 'completed' || callDetails.status === 'error') {
         callCompleted = true;
         if (callDetails.status === 'completed') {
-          // Start polling for transcript
           pollTranscript(callId, leadId);
         }
       } else {
@@ -60,9 +81,7 @@ async function pollCallStatus(callId: string, leadId: string) {
     console.error('Max polling attempts reached. Call status may not be available.');
     await supabase
       .from('leads')
-      .update({
-        call_status: 'unknown'
-      })
+      .update({ call_status: 'unknown' })
       .eq('id', leadId);
   }
 }
@@ -70,7 +89,7 @@ async function pollCallStatus(callId: string, leadId: string) {
 async function pollTranscript(callId: string, leadId: string) {
   let transcriptReceived = false;
   let attempts = 0;
-  const maxAttempts = 20; // Poll for up to 10 minutes (30 seconds * 20 attempts)
+  const maxAttempts = 20;
 
   while (!transcriptReceived && attempts < maxAttempts) {
     try {
@@ -83,28 +102,27 @@ async function pollTranscript(callId: string, leadId: string) {
       const callDetails = response.data;
 
       if (callDetails.status === 'completed' && callDetails.transcripts) {
-        const transcriptData = {
-          concatenated_transcript: callDetails.concatenated_transcript,
-          transcripts: callDetails.transcripts,
+        const updateData = {
+          call_transcript: {
+            transcripts: callDetails.transcripts,
+            concatenated_transcript: callDetails.concatenated_transcript
+          },
+          call_duration: callDetails.call_length,
           summary: callDetails.summary,
-          call_length: callDetails.call_length,
-          answered_by: callDetails.answered_by,
-          call_ended_by: callDetails.call_ended_by
+          analysis: callDetails.analysis,
+          concatenated_transcript: callDetails.concatenated_transcript
         };
 
         await supabase
           .from('leads')
-          .update({
-            call_transcript: JSON.stringify(transcriptData),
-            call_duration: callDetails.corrected_duration || callDetails.call_length
-          })
+          .update(updateData)
           .eq('id', leadId);
 
         console.log('Transcript received and stored');
         transcriptReceived = true;
       } else if (callDetails.status === 'error') {
         console.error('Call ended with an error:', callDetails.error_message);
-        transcriptReceived = true; // Stop polling on error
+        transcriptReceived = true;
       } else {
         console.log(`Waiting for transcript... (Attempt ${attempts + 1})`);
         await new Promise(resolve => setTimeout(resolve, 30000));
