@@ -103,14 +103,17 @@ async function pollTranscript(callId: string, leadId: string) {
 
       if (callDetails.status === 'completed' && callDetails.transcripts) {
         const updateData = {
-          call_transcript: {
-            transcripts: callDetails.transcripts,
-            concatenated_transcript: callDetails.concatenated_transcript
-          },
+          call_transcript: callDetails.transcripts,
+          concatenated_transcript: callDetails.concatenated_transcript,
           call_duration: callDetails.call_length,
           summary: callDetails.summary,
           analysis: callDetails.analysis,
-          concatenated_transcript: callDetails.concatenated_transcript
+          pathway: callDetails.pathway,
+          call_status: callDetails.status,
+          price: callDetails.price,
+          started_at: callDetails.started_at,
+          end_at: callDetails.end_at,
+          call_ended_by: callDetails.call_ended_by
         };
 
         await supabase
@@ -118,7 +121,7 @@ async function pollTranscript(callId: string, leadId: string) {
           .update(updateData)
           .eq('id', leadId);
 
-        console.log('Transcript received and stored');
+        console.log('Transcript and call details received and stored');
         transcriptReceived = true;
       } else if (callDetails.status === 'error') {
         console.error('Call ended with an error:', callDetails.error_message);
