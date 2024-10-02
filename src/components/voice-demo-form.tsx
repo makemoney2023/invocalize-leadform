@@ -65,23 +65,39 @@ export function VoiceDemoForm() {
 
   const analyzeCall = async (callId: string) => {
     try {
-      const response = await axios.post('/api/analyze-call', {
-        callId,
-        goal: "Understand customer satisfaction and product feedback",
-        questions: [
+      const analysisResponse = await axios.post(
+        `https://api.bland.ai/v1/calls/${callId}/analyze`,
+        { goal: "Understand customer satisfaction and product feedback", questions: [
           ["Who answered the call?", "human or voicemail"],
           ["Positive feedback about the product: ", "string"],
           ["Negative feedback about the product: ", "string"],
           ["Customer confirmed they were satisfied", "boolean"]
-        ] as [string, string][]
-      });
+        ] as [string, string][] },
+        {
+          headers: {
+            'Authorization': `Bearer ${process.env.BLAND_API_KEY}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
 
-      // Handle the analysis result as needed
-      console.log('Analysis result:', response.data.analysis)
-      // You might want to update the UI with the analysis result
+      const callDetailsResponse = await axios.get(
+        `https://api.bland.ai/v1/calls/${callId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${process.env.BLAND_API_KEY}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      return {
+        analysis: analysisResponse.data,
+        callDetails: callDetailsResponse.data
+      };
     } catch (error) {
-      console.error('Error analyzing call:', error)
-      // Optionally set an error state or show a notification
+      console.error('Error analyzing call:', error);
+      throw error;
     }
   }
 
