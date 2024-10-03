@@ -4,7 +4,6 @@ import { useState, useEffect } from "react"
 import { Button } from '@/components/ui/button'
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import toast from 'react-hot-toast'
 import axios from 'axios'
@@ -26,6 +25,15 @@ export function VoiceDemoForm() {
       return () => clearTimeout(timer)
     }
   }, [showModal, router])
+
+  useEffect(() => {
+    if (callId) {
+      const timer = setTimeout(() => {
+        analyzeCall(callId)
+      }, 60000) // Analyze call after 1 minute
+      return () => clearTimeout(timer)
+    }
+  }, [callId])
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -65,39 +73,12 @@ export function VoiceDemoForm() {
 
   const analyzeCall = async (callId: string) => {
     try {
-      const analysisResponse = await axios.post(
-        `https://api.bland.ai/v1/calls/${callId}/analyze`,
-        { goal: "Understand customer satisfaction and product feedback", questions: [
-          ["Who answered the call?", "human or voicemail"],
-          ["Positive feedback about the product: ", "string"],
-          ["Negative feedback about the product: ", "string"],
-          ["Customer confirmed they were satisfied", "boolean"]
-        ] as [string, string][] },
-        {
-          headers: {
-            'Authorization': `Bearer ${process.env.BLAND_API_KEY}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
-      const callDetailsResponse = await axios.get(
-        `https://api.bland.ai/v1/calls/${callId}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${process.env.BLAND_API_KEY}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
-      return {
-        analysis: analysisResponse.data,
-        callDetails: callDetailsResponse.data
-      };
+      const response = await axios.post('/api/analyze-call', { callId });
+      console.log('Call analysis result:', response.data);
+      toast.success('Call analysis completed');
     } catch (error) {
       console.error('Error analyzing call:', error);
-      throw error;
+      toast.error('Failed to analyze call');
     }
   }
 
@@ -112,56 +93,39 @@ export function VoiceDemoForm() {
       </p>
       
       <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="name">Name</Label>
-            <Input id="name" name="name" placeholder="First and Last Name" required />
+            <Input id="name" name="name" placeholder="Your full name" required />
           </div>
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
-            <Input id="email" name="email" type="email" placeholder="Your Email" required />
+            <Input id="email" name="email" type="email" placeholder="Your email address" required />
           </div>
         </div>
-        
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="phoneNumber">Phone Number</Label>
-            <Input id="phoneNumber" name="phoneNumber" type="tel" placeholder="Your Phone Number with Country Code" required />
+            <Input id="phoneNumber" name="phoneNumber" type="tel" placeholder="Your phone number" required />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="company">Company Name</Label>
-            <Input id="company" name="company" placeholder="Company Name" required />
+            <Label htmlFor="company">Company</Label>
+            <Input id="company" name="company" placeholder="Your company name" required />
           </div>
         </div>
-        
         <div className="space-y-2">
           <Label htmlFor="role">Role</Label>
-          <Select name="role" required>
-            <SelectTrigger id="role">
-              <SelectValue placeholder="Select your role" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="vp-sales">VP of Sales</SelectItem>
-              <SelectItem value="ceo">CEO</SelectItem>
-              <SelectItem value="cto">CTO</SelectItem>
-              <SelectItem value="other">Other</SelectItem>
-            </SelectContent>
-          </Select>
+          <Input id="role" name="role" placeholder="Your role in the company" required />
         </div>
-        
         <div className="space-y-2">
-          <Label htmlFor="useCase">Use case</Label>
-          <Textarea id="useCase" name="useCase" placeholder="Interview call screening" className="h-24" required />
+          <Label htmlFor="useCase">Use Case</Label>
+          <Textarea id="useCase" name="useCase" placeholder="Describe your use case" required />
         </div>
-        
-        <Button type="submit" className="w-full" disabled={isLoading}>
-          {isLoading ? "Sending..." : "Call Me"}
+        <Button type="submit" disabled={isLoading} className="w-full">
+          {isLoading ? 'Submitting...' : 'Submit'}
         </Button>
-        
-        {error && <p className="text-red-500">{error}</p>}
-        {callId && <p>Call ID: {callId}</p>}
       </form>
-      <StatusModal isOpen={showModal} />
+      {showModal && <StatusModal isOpen={showModal} />}
     </div>
   )
 }

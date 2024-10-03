@@ -25,7 +25,7 @@ async function pollCallStatus(callId: string, leadId: string) {
 
       const updateData = {
         call_status: callDetails.status,
-        call_length: callDetails.call_length,
+        call_length: Math.round(callDetails.call_length),
         batch_id: callDetails.batch_id,
         to_number: callDetails.to,
         from_number: callDetails.from,
@@ -49,22 +49,27 @@ async function pollCallStatus(callId: string, leadId: string) {
         call_ended_by: callDetails.call_ended_by,
         pathway_logs: callDetails.pathway_logs,
         analysis_schema: callDetails.analysis_schema,
-        status: callDetails.status,
         corrected_duration: callDetails.corrected_duration,
         end_at: callDetails.end_at
       };
 
-      await supabase
+      const { data, error } = await supabase
         .from('leads')
         .update(updateData)
         .eq('id', leadId);
 
+      if (error) {
+        console.error('Error updating lead data:', error);
+        throw error;
+      }
+
+      console.log('Updated lead data:', updateData);
       console.log(`Call status: ${callDetails.status}`);
 
       if (callDetails.status === 'completed' || callDetails.status === 'error') {
         callCompleted = true;
         if (callDetails.status === 'completed') {
-          pollTranscript(callId, leadId);
+          await pollTranscript(callId, leadId);
         }
       } else {
         console.log(`Waiting for call completion... (Attempt ${attempts + 1})`);
@@ -105,7 +110,7 @@ async function pollTranscript(callId: string, leadId: string) {
         const updateData = {
           call_transcript: callDetails.transcripts,
           concatenated_transcript: callDetails.concatenated_transcript,
-          call_duration: callDetails.call_length,
+          call_length: callDetails.call_length,
           summary: callDetails.summary,
           analysis: callDetails.analysis,
           pathway: callDetails.pathway,
@@ -113,15 +118,31 @@ async function pollTranscript(callId: string, leadId: string) {
           price: callDetails.price,
           started_at: callDetails.started_at,
           end_at: callDetails.end_at,
-          call_ended_by: callDetails.call_ended_by
+          call_ended_by: callDetails.call_ended_by,
+          variables: callDetails.variables,
+          answered_by: callDetails.answered_by,
+          record: callDetails.record,
+          recording_url: callDetails.recording_url,
+          c_id: callDetails.c_id,
+          metadata: callDetails.metadata,
+          local_dialing: callDetails.local_dialing,
+          pathway_logs: callDetails.pathway_logs,
+          analysis_schema: callDetails.analysis_schema,
+          corrected_duration: callDetails.corrected_duration,
+          city: callDetails.variables?.city || null // Add this line
         };
 
-        await supabase
+        const { data, error } = await supabase
           .from('leads')
           .update(updateData)
           .eq('id', leadId);
 
-        console.log('Transcript and call details received and stored');
+        if (error) {
+          console.error('Error updating lead data with transcript:', error);
+          throw error;
+        }
+
+        console.log('Updated lead data with transcript:', updateData);
         transcriptReceived = true;
       } else if (callDetails.status === 'error') {
         console.error('Call ended with an error:', callDetails.error_message);
@@ -172,7 +193,7 @@ export async function POST(req: Request) {
         first_sentence: `Hello, is this ${name}?`,
         wait_for_greeting: true,
         interruption_threshold: 123,
-        model: "enhanced",
+        model: "turbo",
         temperature: 0.7,
         metadata: { leadId, name, email, company, role, useCase }
       },
@@ -191,13 +212,19 @@ export async function POST(req: Request) {
     }
 
     // Update lead entry with initial call ID
-    await supabase
+    const { error: updateError } = await supabase
       .from('leads')
       .update({ call_id: callId })
       .eq('id', leadId);
 
+    if (updateError) {
+      console.error('Error updating lead with call ID:', updateError);
+      throw updateError;
+    }
+
     // Start polling for call status in the background
     pollCallStatus(callId, leadId);
+    console.log('Started polling for call status');
 
     return NextResponse.json({ success: true, callId, leadId });
   } catch (error: any) {

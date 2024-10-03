@@ -4,17 +4,25 @@ import { storeCallAnalysis } from '@/utils/supabase';
 
 export async function POST(req: Request) {
   try {
-    const { callId, goal, questions } = await req.json();
+    const { callId } = await req.json();
 
-    if (!callId || !goal || !questions) {
-      return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
+    if (!callId) {
+      return NextResponse.json({ error: 'Missing call ID' }, { status: 400 });
     }
+
+    const goal = "Understand customer satisfaction and product feedback";
+    const questions = [
+      ["Who answered the call?", "human or voicemail"],
+      ["Positive feedback about the product: ", "string"],
+      ["Negative feedback about the product: ", "string"],
+      ["Customer confirmed they were satisfied", "boolean"]
+    ];
 
     console.log('Analyzing call:', { callId, goal, questions });
 
     let analysisResult;
     try {
-      analysisResult = await analyzeCall(callId, goal, questions);
+      analysisResult = await analyzeCall(callId, goal, questions as [string, string][]);
       console.log('Analysis result:', analysisResult);
     } catch (error) {
       console.error('Error in analyzeCall:', error);
