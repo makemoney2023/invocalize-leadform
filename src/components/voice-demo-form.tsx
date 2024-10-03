@@ -20,7 +20,7 @@ export function VoiceDemoForm() {
   useEffect(() => {
     if (showModal) {
       const timer = setTimeout(() => {
-        router.push('https://invocalize-dash.vercel.app/')
+        router.push('https://invocalize-app.vercel.app/')
       }, 10000) // Redirect after 10 seconds
       return () => clearTimeout(timer)
     }
