@@ -26,15 +26,6 @@ export function VoiceDemoForm() {
     }
   }, [showModal, router])
 
-  useEffect(() => {
-    if (callId) {
-      const timer = setTimeout(() => {
-        analyzeCall(callId)
-      }, 60000) // Analyze call after 1 minute
-      return () => clearTimeout(timer)
-    }
-  }, [callId])
-
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setIsLoading(true)
@@ -68,17 +59,6 @@ export function VoiceDemoForm() {
       setError('Failed to send call. Please try again.')
       setIsLoading(false)
       toast.error('Failed to initiate call. Please try again.');
-    }
-  }
-
-  const analyzeCall = async (callId: string) => {
-    try {
-      const response = await axios.post('/api/analyze-call', { callId });
-      console.log('Call analysis result:', response.data);
-      toast.success('Call analysis completed');
-    } catch (error) {
-      console.error('Error analyzing call:', error);
-      toast.error('Failed to analyze call');
     }
   }
 

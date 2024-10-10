@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
+import { initiateCall, analyzeCall, fetchLatestCallDetails } from '@/utils/blandAI';
+import { storeCallData } from '@/utils/supabase';
 
 const BLAND_API_KEY = process.env.BLAND_API_KEY;
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -9,157 +11,50 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl!, supabaseKey!);
 
 async function pollCallStatus(callId: string, leadId: string) {
-  let callCompleted = false;
-  let attempts = 0;
-  const maxAttempts = 10;
+  const maxAttempts = 20;
+  const pollInterval = 15000;
+  const analysisRetries = 3;
 
-  while (!callCompleted && attempts < maxAttempts) {
+  for (let attempts = 0; attempts < maxAttempts; attempts++) {
     try {
-      const response = await axios.get(`https://api.bland.ai/v1/calls/${callId}`, {
-        headers: {
-          'Authorization': BLAND_API_KEY
+      const callDetails = await fetchLatestCallDetails(callId);
+      console.log(`Poll attempt ${attempts + 1}: Call status - ${callDetails.status}`);
+      
+      if (callDetails.status === 'completed') {
+        let analysisResult;
+        for (let i = 0; i < analysisRetries; i++) {
+          try {
+            analysisResult = await analyzeCall(callId);
+            break;
+          } catch (error) {
+            console.error(`Analysis attempt ${i + 1} failed:`, error);
+            if (i === analysisRetries - 1) throw error;
+          }
         }
-      });
-
-      const callDetails = response.data;
-
-      const updateData = {
-        call_status: callDetails.status,
-        call_length: Math.round(callDetails.call_length),
-        batch_id: callDetails.batch_id,
-        to_number: callDetails.to,
-        from_number: callDetails.from,
-        request_data: callDetails.request_data,
-        completed: callDetails.completed,
-        inbound: callDetails.inbound,
-        queue_status: callDetails.queue_status,
-        endpoint_url: callDetails.endpoint_url,
-        max_duration: callDetails.max_duration,
-        error_message: callDetails.error_message,
-        variables: callDetails.variables,
-        answered_by: callDetails.answered_by,
-        record: callDetails.record,
-        recording_url: callDetails.recording_url,
-        c_id: callDetails.c_id,
-        metadata: callDetails.metadata,
-        summary: callDetails.summary,
-        price: callDetails.price,
-        started_at: callDetails.started_at,
-        local_dialing: callDetails.local_dialing,
-        call_ended_by: callDetails.call_ended_by,
-        pathway_logs: callDetails.pathway_logs,
-        analysis_schema: callDetails.analysis_schema,
-        corrected_duration: callDetails.corrected_duration,
-        end_at: callDetails.end_at
-      };
-
-      const { data, error } = await supabase
-        .from('leads')
-        .update(updateData)
-        .eq('id', leadId);
-
-      if (error) {
-        console.error('Error updating lead data:', error);
-        throw error;
+        
+        await storeCallData(callId, { 
+          ...callDetails, 
+          analysis: analysisResult, 
+          summary: callDetails.summary, 
+          recording_url: callDetails.recording_url 
+        }, leadId);
+        return;
+      } else if (callDetails.status === 'failed' || callDetails.status === 'error') {
+        await storeCallData(callId, callDetails, leadId);
+        return;
       }
 
-      console.log('Updated lead data:', updateData);
-      console.log(`Call status: ${callDetails.status}`);
-
-      if (callDetails.status === 'completed' || callDetails.status === 'error') {
-        callCompleted = true;
-        if (callDetails.status === 'completed') {
-          await pollTranscript(callId, leadId);
-        }
-      } else {
-        console.log(`Waiting for call completion... (Attempt ${attempts + 1})`);
-        await new Promise(resolve => setTimeout(resolve, 30000));
-        attempts++;
-      }
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
     } catch (error) {
       console.error('Error polling call status:', error);
-      attempts++;
-    }
-  }
-
-  if (!callCompleted) {
-    console.error('Max polling attempts reached. Call status may not be available.');
-    await supabase
-      .from('leads')
-      .update({ call_status: 'unknown' })
-      .eq('id', leadId);
-  }
-}
-
-async function pollTranscript(callId: string, leadId: string) {
-  let transcriptReceived = false;
-  let attempts = 0;
-  const maxAttempts = 20;
-
-  while (!transcriptReceived && attempts < maxAttempts) {
-    try {
-      const response = await axios.get(`https://api.bland.ai/v1/calls/${callId}`, {
-        headers: {
-          'Authorization': BLAND_API_KEY
-        }
-      });
-
-      const callDetails = response.data;
-
-      if (callDetails.status === 'completed' && callDetails.transcripts) {
-        const updateData = {
-          call_transcript: callDetails.transcripts,
-          concatenated_transcript: callDetails.concatenated_transcript,
-          call_length: callDetails.call_length,
-          summary: callDetails.summary,
-          analysis: callDetails.analysis,
-          pathway: callDetails.pathway,
-          call_status: callDetails.status,
-          price: callDetails.price,
-          started_at: callDetails.started_at,
-          end_at: callDetails.end_at,
-          call_ended_by: callDetails.call_ended_by,
-          variables: callDetails.variables,
-          answered_by: callDetails.answered_by,
-          record: callDetails.record,
-          recording_url: callDetails.recording_url,
-          c_id: callDetails.c_id,
-          metadata: callDetails.metadata,
-          local_dialing: callDetails.local_dialing,
-          pathway_logs: callDetails.pathway_logs,
-          analysis_schema: callDetails.analysis_schema,
-          corrected_duration: callDetails.corrected_duration,
-          city: callDetails.variables?.city || null // Add this line
-        };
-
-        const { data, error } = await supabase
+      if (attempts === maxAttempts - 1) {
+        await supabase
           .from('leads')
-          .update(updateData)
+          .update({ call_status: 'error', error_message: String(error) })
           .eq('id', leadId);
-
-        if (error) {
-          console.error('Error updating lead data with transcript:', error);
-          throw error;
-        }
-
-        console.log('Updated lead data with transcript:', updateData);
-        transcriptReceived = true;
-      } else if (callDetails.status === 'error') {
-        console.error('Call ended with an error:', callDetails.error_message);
-        transcriptReceived = true;
-      } else {
-        console.log(`Waiting for transcript... (Attempt ${attempts + 1})`);
-        await new Promise(resolve => setTimeout(resolve, 30000));
-        attempts++;
+        throw new Error('Max polling attempts reached. Call status could not be determined.');
       }
-    } catch (error) {
-      console.error('Error polling for transcript:', error);
-      attempts++;
     }
-  }
-
-  if (!transcriptReceived) {
-    console.error('Max polling attempts reached. Transcript may not be available.');
   }
 }
 
@@ -172,61 +67,30 @@ export async function POST(req: Request) {
   try {
     const { name, email, phoneNumber, company, role, useCase } = await req.json();
 
-    // Insert lead data into Supabase
+    console.log('Received form data:', { name, email, phoneNumber, company, role, useCase });
+
     const { data: leadData, error: leadError } = await supabase
       .from('leads')
       .insert({ name, email, phone_number: phoneNumber, company, role, use_case: useCase })
       .select()
       .single();
 
-    if (leadError) throw leadError;
+    if (leadError) {
+      console.error('Error inserting lead data:', leadError);
+      throw leadError;
+    }
 
     const leadId = leadData.id;
+    console.log('Lead inserted with ID:', leadId);
 
-    // Initiate call with Bland AI
-    const blandApiResponse = await axios.post(
-      'https://api.bland.ai/v1/calls',
-      {
-        phone_number: phoneNumber,
-        task: `You are an AI assistant calling ${name} from ${company}. They recently submitted a form expressing interest in our AI voice agent demo. Their role is ${role} and their use case is: ${useCase}. Your task is to briefly introduce yourself, thank them for their interest, and demonstrate the capabilities of our AI voice agent based on their use case.`,
-        voice: "maya",
-        first_sentence: `Hello, is this ${name}?`,
-        wait_for_greeting: true,
-        interruption_threshold: 123,
-        model: "turbo",
-        temperature: 0.7,
-        metadata: { leadId, name, email, company, role, useCase }
-      },
-      {
-        headers: {
-          'Authorization': BLAND_API_KEY,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
+    const blandApiResponse = await initiateCall(phoneNumber, `You are an AI assistant calling ${name} from ${company}. They recently submitted a form expressing interest in our AI voice agent demo. Their role is ${role} and their use case is: ${useCase}. Your task is to briefly introduce yourself, thank them for their interest, and demonstrate the capabilities of our AI voice agent based on their use case.`, { leadId, name, email, company, role, useCase });
 
-    const callId = blandApiResponse.data.call_id;
+    await storeCallData(blandApiResponse.call_id, blandApiResponse, leadId);
 
-    if (!callId) {
-      throw new Error('Failed to get call ID from Bland AI');
-    }
+    // Start polling for call status
+    pollCallStatus(blandApiResponse.call_id, leadId);
 
-    // Update lead entry with initial call ID
-    const { error: updateError } = await supabase
-      .from('leads')
-      .update({ call_id: callId })
-      .eq('id', leadId);
-
-    if (updateError) {
-      console.error('Error updating lead with call ID:', updateError);
-      throw updateError;
-    }
-
-    // Start polling for call status in the background
-    pollCallStatus(callId, leadId);
-    console.log('Started polling for call status');
-
-    return NextResponse.json({ success: true, callId, leadId });
+    return NextResponse.json({ success: true, callId: blandApiResponse.call_id, leadId });
   } catch (error: any) {
     console.error('Error in send-call API route:', error);
     return NextResponse.json({ error: 'Internal server error', details: error.message }, { status: 500 });

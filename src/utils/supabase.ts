@@ -3,66 +3,77 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(supabaseUrl!, supabaseKey!);
+const supabase = createClient(supabaseUrl!, supabaseKey!);
 
-export async function storeInitialCallData(leadId: string, callId: string) {
+export async function storeCallData(callId: string, callData: any, leadId: string) {
   try {
+    console.log(`Storing call data for call ${callId}`);
+    
+    // Format analysis data if necessary
+    const formattedAnalysis = formatAnalysisData(callData.analysis);
+    
+    const updateData = {
+      call_id: callId,
+      call_status: callData.status,
+      call_length: Math.round(callData.call_length) || 0,
+      batch_id: callData.batch_id,
+      to_number: callData.to,
+      from_number: callData.from,
+      request_data: callData.request_data,
+      completed: callData.completed,
+      inbound: callData.inbound,
+      queue_status: callData.queue_status,
+      endpoint_url: callData.endpoint_url,
+      max_duration: callData.max_duration,
+      error_message: callData.error_message,
+      variables: callData.variables,
+      answered_by: callData.answered_by,
+      record: callData.record,
+      recording_url: callData.recording_url,
+      c_id: callData.c_id,
+      metadata: callData.metadata,
+      summary: callData.summary,
+      price: callData.price,
+      started_at: callData.started_at,
+      local_dialing: callData.local_dialing,
+      call_ended_by: callData.call_ended_by,
+      pathway_logs: callData.pathway_logs,
+      analysis_schema: callData.analysis_schema,
+      analysis: formattedAnalysis,
+      corrected_duration: callData.corrected_duration,
+      end_at: callData.end_at,
+      concatenated_transcript: callData.concatenated_transcript,
+      transcripts: JSON.stringify(callData.transcripts),
+      city: callData.variables?.city || null,
+      country: callData.variables?.country || null,
+      state: callData.variables?.state || null,
+      zip: callData.variables?.zip || null,
+      updated_at: new Date().toISOString()
+    };
+
+    console.log(`Analysis data being stored:`, JSON.stringify(formattedAnalysis, null, 2));
+
     const { data, error } = await supabase
       .from('leads')
-      .update({ call_id: callId })
+      .update(updateData)
       .eq('id', leadId);
 
     if (error) {
-      console.error('Supabase error:', error);
+      console.error(`Supabase error for call ${callId}:`, error);
+      if (error.message.includes('analysis')) {
+        console.error('Error specifically related to analysis data:', formattedAnalysis);
+      }
       throw error;
     }
-    console.log('Initial call data stored successfully:', data);
+    console.log(`Call data stored successfully for call ${callId}`);
     return data;
   } catch (error) {
-    console.error('Error in storeInitialCallData:', error);
+    console.error(`Error in storeCallData for call ${callId}:`, error);
     throw error;
   }
 }
 
-export async function storeCallAnalysis(callId: string, analysisData: any) {
-  try {
-    const { data, error } = await supabase
-      .from('leads')
-      .update({
-        analysis: analysisData.analysis,
-        call_status: analysisData.callDetails.status,
-        call_length: Math.round(analysisData.callDetails.call_length),
-        batch_id: analysisData.callDetails.batch_id,
-        to_number: analysisData.callDetails.to,
-        from_number: analysisData.callDetails.from,
-        request_data: analysisData.callDetails.request_data,
-        completed: analysisData.callDetails.completed,
-        inbound: analysisData.callDetails.inbound,
-        queue_status: analysisData.callDetails.queue_status,
-        endpoint_url: analysisData.callDetails.endpoint_url,
-        max_duration: analysisData.callDetails.max_duration,
-        error_message: analysisData.callDetails.error_message,
-        variables: analysisData.callDetails.variables,
-        answered_by: analysisData.callDetails.answered_by,
-        record: analysisData.callDetails.record,
-        recording_url: analysisData.callDetails.recording_url,
-        c_id: analysisData.callDetails.c_id,
-        metadata: analysisData.callDetails.metadata,
-        summary: analysisData.callDetails.summary,
-        price: analysisData.callDetails.price,
-        started_at: analysisData.callDetails.started_at,
-        local_dialing: analysisData.callDetails.local_dialing
-      })
-      .eq('call_id', callId);
-
-    if (error) {
-      console.error('Supabase error:', error);
-      throw error;
-    }
-    console.log('Call analysis stored successfully:', data);
-    return data;
-  } catch (error) {
-    console.error('Error in storeCallAnalysis:', error);
-    throw error;
-  }
+function formatAnalysisData(analysisData: any) {
+  // Add any necessary formatting logic here
+  return analysisData;
 }
