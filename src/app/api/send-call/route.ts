@@ -32,10 +32,12 @@ async function pollCallStatus(callId: string, leadId: string) {
           }
         }
         
+        console.log('Call summary:', callDetails.summary);
+        
         await storeCallData(callId, { 
           ...callDetails, 
           analysis: analysisResult, 
-          summary: callDetails.summary, 
+          summary: callDetails.summary || 'No summary available', 
           recording_url: callDetails.recording_url 
         }, leadId);
         return;

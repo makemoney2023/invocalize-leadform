@@ -104,7 +104,10 @@ export async function fetchLatestCallDetails(callId: string) {
     });
     
     console.log('Latest call details:', JSON.stringify(response.data, null, 2));
-    return response.data;
+    return {
+      ...response.data,
+      summary: response.data.summary || 'No summary available'
+    };
   } catch (error) {
     if (axios.isAxiosError(error) && error.response) {
       console.error('Error fetching latest call details:', error.response.data);
